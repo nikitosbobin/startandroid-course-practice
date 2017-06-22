@@ -1,0 +1,10 @@
+ext {
+    supportVersion = '24.2.1'
+    okhttpVersion = '3.4.1'
+    retrofitVersion = '2.1.0'
+    rxandroidVersion = '1.2.1'
+    rxjavaVersion = '1.1.10'
+    butterKnifeVersion = '8.3.0'
+    picassoVersion = '2.5.2'
+    picassoDownloaderVersion = '1.0.2'
+}
