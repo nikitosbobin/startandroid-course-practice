@@ -13,6 +13,8 @@ import android.support.v4.view.ViewCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.transition.Slide;
+import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.ImageView;
@@ -22,11 +24,22 @@ import java.util.List;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
+import io.realm.Realm;
+import io.realm.RealmResults;
 import ru.gdgkazan.popularmovies.R;
 import ru.gdgkazan.popularmovies.model.content.Movie;
 import ru.gdgkazan.popularmovies.model.content.Review;
 import ru.gdgkazan.popularmovies.model.content.Video;
+import ru.gdgkazan.popularmovies.model.response.ReviewsResponse;
+import ru.gdgkazan.popularmovies.model.response.VideosResponse;
+import ru.gdgkazan.popularmovies.network.ApiFactory;
+import ru.gdgkazan.popularmovies.screen.loading.LoadingDialog;
+import ru.gdgkazan.popularmovies.screen.loading.LoadingView;
 import ru.gdgkazan.popularmovies.utils.Images;
+import rx.Observable;
+import rx.Subscription;
+import rx.android.schedulers.AndroidSchedulers;
+import rx.schedulers.Schedulers;
 
 public class MovieDetailsActivity extends AppCompatActivity {
 
@@ -52,6 +65,11 @@ public class MovieDetailsActivity extends AppCompatActivity {
 
     @BindView(R.id.rating)
     TextView mRatingTextView;
+    private Subscription movieReviewsSubscription;
+    private Subscription movieVideosSubscription;
+    private LayoutInflater inflater;
+    private LoadingView loadingView;
+    private int hideCounter;
 
     public static void navigate(@NonNull AppCompatActivity activity, @NonNull View transitionImage,
                                 @NonNull Movie movie) {
@@ -61,7 +79,6 @@ public class MovieDetailsActivity extends AppCompatActivity {
         ActivityOptionsCompat options = ActivityOptionsCompat.makeSceneTransitionAnimation(activity, transitionImage, IMAGE);
         ActivityCompat.startActivity(activity, intent, options.toBundle());
     }
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -77,27 +94,59 @@ public class MovieDetailsActivity extends AppCompatActivity {
         if (getSupportActionBar() != null) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
         }
-
+        inflater = LayoutInflater.from(this);
         Movie movie = getIntent().getParcelableExtra(EXTRA_MOVIE);
         showMovie(movie);
 
-        /**
-         * TODO : task
-         *
-         * Load movie trailers and reviews and display them
-         *
-         * 1) See http://docs.themoviedb.apiary.io/#reference/movies/movieidtranslations/get?console=1
-         * http://docs.themoviedb.apiary.io/#reference/movies/movieidtranslations/get?console=1
-         * for API documentation
-         *
-         * 2) Add requests to {@link ru.gdgkazan.popularmovies.network.MovieService} for trailers and videos
-         *
-         * 3) Execute requests in parallel and show loading progress until both of them are finished
-         *
-         * 4) Save trailers and videos to Realm and use cached version when error occurred
-         *
-         * 5) Handle lifecycle changes any way you like
-         */
+        loadingView = LoadingDialog.view(getSupportFragmentManager());
+        movieReviewsSubscription = ApiFactory.getMoviesService()
+                .movieReviews(movie.getId())
+                .map(ReviewsResponse::getReviews)
+                .flatMap(x -> {
+                    Realm.getDefaultInstance().executeTransaction(realm -> {
+                        realm.delete(Review.class);
+                        realm.insert(x);
+                    });
+                    return Observable.just(x);
+                })
+                .onErrorResumeNext(throwable -> {
+                    Realm realm = Realm.getDefaultInstance();
+                    RealmResults<Review> results = realm.where(Review.class).findAll();
+                    return Observable.just(realm.copyFromRealm(results));
+                })
+                .doOnSubscribe(loadingView::showLoadingIndicator)
+                .doAfterTerminate(this::hideLoadingIndicator)
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(this::showReviews, x -> Log.d("logs, errors", x.getMessage()));
+
+        movieVideosSubscription = ApiFactory.getMoviesService()
+                .movieVideos(movie.getId())
+                .map(VideosResponse::getVideos)
+                .flatMap(x -> {
+                    Realm.getDefaultInstance().executeTransaction(realm -> {
+                        realm.delete(Video.class);
+                        realm.insert(x);
+                    });
+                    return Observable.just(x);
+                })
+                .onErrorResumeNext(throwable -> {
+                    Realm realm = Realm.getDefaultInstance();
+                    RealmResults<Video> results = realm.where(Video.class).findAll();
+                    return Observable.just(realm.copyFromRealm(results));
+                })
+                .doOnSubscribe(loadingView::showLoadingIndicator)
+                .doAfterTerminate(this::hideLoadingIndicator)
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(this::showTrailers, x -> Log.d("logs, errors", x.getMessage()));
+    }
+
+    private void hideLoadingIndicator() {
+        hideCounter++;
+        Log.d("hideLoadingIndicator", "" + hideCounter);
+        if (hideCounter == 2 && loadingView != null)
+            loadingView.hideLoadingIndicator();
     }
 
     @Override
@@ -139,11 +188,22 @@ public class MovieDetailsActivity extends AppCompatActivity {
     }
 
     private void showTrailers(@NonNull List<Video> videos) {
+        Log.d("logs", videos.size() + "videos obtained");
         // TODO : show trailers
     }
 
     private void showReviews(@NonNull List<Review> reviews) {
+        Log.d("logs", reviews.size() + "reviews obtained");
         // TODO : show reviews
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (movieReviewsSubscription != null)
+            movieReviewsSubscription.unsubscribe();
+
+        if (movieVideosSubscription != null)
+            movieVideosSubscription.unsubscribe();
+    }
 }
