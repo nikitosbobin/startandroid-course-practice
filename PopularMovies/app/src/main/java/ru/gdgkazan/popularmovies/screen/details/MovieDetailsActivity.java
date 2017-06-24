@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
+import android.support.annotation.DimenRes;
 import android.support.annotation.NonNull;
 import android.support.design.widget.CollapsingToolbarLayout;
 import android.support.v4.app.ActivityCompat;
@@ -13,14 +14,19 @@ import android.support.v4.view.ViewCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.transition.Slide;
+import android.util.AttributeSet;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -36,12 +42,13 @@ import ru.gdgkazan.popularmovies.network.ApiFactory;
 import ru.gdgkazan.popularmovies.screen.loading.LoadingDialog;
 import ru.gdgkazan.popularmovies.screen.loading.LoadingView;
 import ru.gdgkazan.popularmovies.utils.Images;
+import ru.gdgkazan.popularmovies.utils.Videos;
 import rx.Observable;
 import rx.Subscription;
 import rx.android.schedulers.AndroidSchedulers;
 import rx.schedulers.Schedulers;
 
-public class MovieDetailsActivity extends AppCompatActivity {
+public class MovieDetailsActivity extends AppCompatActivity implements View.OnClickListener {
 
     private static final String MAXIMUM_RATING = "10";
 
@@ -63,11 +70,17 @@ public class MovieDetailsActivity extends AppCompatActivity {
     @BindView(R.id.overview)
     TextView mOverviewTextView;
 
+    @BindView(R.id.reviews)
+    TextView mReviewsTextView;
+
     @BindView(R.id.rating)
     TextView mRatingTextView;
+
+    @BindView(R.id.content_linear_layout)
+    LinearLayout linearLayout;
+
     private Subscription movieReviewsSubscription;
     private Subscription movieVideosSubscription;
-    private LayoutInflater inflater;
     private LoadingView loadingView;
     private int hideCounter;
 
@@ -79,6 +92,7 @@ public class MovieDetailsActivity extends AppCompatActivity {
         ActivityOptionsCompat options = ActivityOptionsCompat.makeSceneTransitionAnimation(activity, transitionImage, IMAGE);
         ActivityCompat.startActivity(activity, intent, options.toBundle());
     }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -94,7 +108,6 @@ public class MovieDetailsActivity extends AppCompatActivity {
         if (getSupportActionBar() != null) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
         }
-        inflater = LayoutInflater.from(this);
         Movie movie = getIntent().getParcelableExtra(EXTRA_MOVIE);
         showMovie(movie);
 
@@ -187,14 +200,31 @@ public class MovieDetailsActivity extends AppCompatActivity {
         mRatingTextView.setText(getString(R.string.rating, average, MAXIMUM_RATING));
     }
 
-    private void showTrailers(@NonNull List<Video> videos) {
-        Log.d("logs", videos.size() + "videos obtained");
-        // TODO : show trailers
+    private void showTrailers(List<Video> videos) {
+        if (videos == null || videos.size() == 0)
+            return;
+        for (int i = 0; i < videos.size(); ++i) {
+            TextView textView = new TextView(this);
+            textView.setText(videos.get(i).getName());
+            textView.setTextSize(18);
+            textView.setTag(videos.get(i));
+            textView.setOnClickListener(this);
+            linearLayout.addView(textView);
+        }
     }
 
-    private void showReviews(@NonNull List<Review> reviews) {
-        Log.d("logs", reviews.size() + "reviews obtained");
-        // TODO : show reviews
+    private void showReviews(List<Review> reviews) {
+        if (reviews == null || reviews.size() == 0)
+            return;
+        StringBuilder stringBuilder = new StringBuilder();
+        for (int i = 0; i < reviews.size(); ++i) {
+            Review currentReview = reviews.get(i);
+            stringBuilder.append(currentReview.getAuthor());
+            stringBuilder.append("\n");
+            stringBuilder.append(currentReview.getContent());
+            stringBuilder.append("\n\n");
+        }
+        mReviewsTextView.setText(stringBuilder.toString());
     }
 
     @Override
@@ -205,5 +235,11 @@ public class MovieDetailsActivity extends AppCompatActivity {
 
         if (movieVideosSubscription != null)
             movieVideosSubscription.unsubscribe();
+    }
+
+    @Override
+    public void onClick(View v) {
+        Video video = (Video) v.getTag();
+        Videos.browseVideo(this, video);
     }
 }
