@@ -115,12 +115,12 @@ public class MovieDetailsActivity extends AppCompatActivity implements View.OnCl
         movieReviewsSubscription = ApiFactory.getMoviesService()
                 .movieReviews(movie.getId())
                 .map(ReviewsResponse::getReviews)
-                .flatMap(x -> {
+                .map(x -> {
                     Realm.getDefaultInstance().executeTransaction(realm -> {
                         realm.delete(Review.class);
                         realm.insert(x);
                     });
-                    return Observable.just(x);
+                    return x;
                 })
                 .onErrorResumeNext(throwable -> {
                     Realm realm = Realm.getDefaultInstance();
@@ -136,12 +136,12 @@ public class MovieDetailsActivity extends AppCompatActivity implements View.OnCl
         movieVideosSubscription = ApiFactory.getMoviesService()
                 .movieVideos(movie.getId())
                 .map(VideosResponse::getVideos)
-                .flatMap(x -> {
+                .map(x -> {
                     Realm.getDefaultInstance().executeTransaction(realm -> {
                         realm.delete(Video.class);
                         realm.insert(x);
                     });
-                    return Observable.just(x);
+                    return x;
                 })
                 .onErrorResumeNext(throwable -> {
                     Realm realm = Realm.getDefaultInstance();

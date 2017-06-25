@@ -62,12 +62,12 @@ public class MoviesActivity extends AppCompatActivity implements MoviesAdapter.O
         mMoviesSubscription = ApiFactory.getMoviesService()
                 .popularMovies()
                 .map(MoviesResponse::getMovies)
-                .flatMap(movies -> {
+                .map(movies -> {
                     Realm.getDefaultInstance().executeTransaction(realm -> {
                         realm.delete(Movie.class);
                         realm.insert(movies);
                     });
-                    return Observable.just(movies);
+                    return movies;
                 })
                 .onErrorResumeNext(throwable -> {
                     Realm realm = Realm.getDefaultInstance();
